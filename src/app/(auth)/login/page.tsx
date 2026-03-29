@@ -3,9 +3,10 @@
 import Link from 'next/link'
 import { useActionState } from 'react'
 import { useSearchParams } from 'next/navigation'
+import { Suspense } from 'react'
 import { login } from '@/app/actions/auth'
 
-export default function LoginPage() {
+function LoginForm() {
   const [state, action, pending] = useActionState(login, undefined)
   const searchParams = useSearchParams()
   const dbError = searchParams.get('error') === 'db'
@@ -42,10 +43,7 @@ export default function LoginPage() {
           )}
 
           <div className="space-y-1.5">
-            <label
-              htmlFor="email"
-              className="block text-sm font-medium text-stone-700"
-            >
+            <label htmlFor="email" className="block text-sm font-medium text-stone-700">
               Email
             </label>
             <input
@@ -60,10 +58,7 @@ export default function LoginPage() {
           </div>
 
           <div className="space-y-1.5">
-            <label
-              htmlFor="password"
-              className="block text-sm font-medium text-stone-700"
-            >
+            <label htmlFor="password" className="block text-sm font-medium text-stone-700">
               Password
             </label>
             <input
@@ -90,13 +85,18 @@ export default function LoginPage() {
       {/* Footer link */}
       <p className="text-center text-sm text-stone-500 mt-6">
         Don&apos;t have an account?{' '}
-        <Link
-          href="/signup"
-          className="text-emerald-600 font-medium hover:text-emerald-700 transition"
-        >
+        <Link href="/signup" className="text-emerald-600 font-medium hover:text-emerald-700 transition">
           Sign up
         </Link>
       </p>
     </div>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
   )
 }
