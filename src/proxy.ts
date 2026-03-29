@@ -54,9 +54,8 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  if (isAuthRoute && user && !request.nextUrl.searchParams.get('error')) {
-    return NextResponse.redirect(new URL('/dashboard', request.url))
-  }
+  // Don't redirect authenticated users away from auth pages — avoids redirect loops
+  // when DB is unreachable. Server actions handle post-login redirects.
 
   return supabaseResponse
 }
