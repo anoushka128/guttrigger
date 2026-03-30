@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Green G arc, opening on right (~300° span) -->
+  <path d="M 69.5,16.2 A 39,39 0 1,0 69.5,83.8"
+        fill="none" stroke="#5DBD5A" stroke-width="15" stroke-linecap="butt"/>
+  <!-- G crossbar -->
+  <line x1="57" y1="50" x2="80" y2="50"
+        stroke="#5DBD5A" stroke-width="15" stroke-linecap="round"/>
+  <!-- Blue wave swoosh -->
+  <path d="M 13,50 C 36,22 62,78 88,50"
+        fill="none" stroke="#29ABE2" stroke-width="11" stroke-linecap="round"/>
+</svg>

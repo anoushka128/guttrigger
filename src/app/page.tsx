@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
+import Logo from '@/components/Logo'
 
 export default async function LandingPage() {
   const supabase = await createClient()
@@ -12,10 +13,7 @@ export default async function LandingPage() {
       {/* HEADER */}
       <header className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-sm border-b border-stone-100">
         <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-2xl">🌿</span>
-            <span className="font-bold text-stone-900 text-lg tracking-tight">GutTrigger</span>
-          </div>
+          <Logo size={30} showText={true} />
           <div className="flex items-center gap-3">
             <Link href="/login" className="text-sm font-medium text-stone-600 hover:text-stone-900 transition">Sign in</Link>
             <Link href="/signup" className="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold px-4 py-2 rounded-xl transition">Get Started</Link>
@@ -158,7 +156,7 @@ export default async function LandingPage() {
             ⚕️ <strong className="text-stone-500">Medical disclaimer:</strong> GutTrigger is for informational and self-tracking purposes only. It is not a medical device, does not provide diagnoses, and is not a substitute for professional medical advice. Always consult a qualified healthcare provider about digestive symptoms, especially severe or persistent ones. Food correlations shown in the app are patterns in your personal data — they are not confirmed medical findings.
           </p>
           <div className="flex items-center justify-center gap-6 text-xs text-stone-400">
-            <span>🌿 GutTrigger</span>
+            <Logo size={20} showText={true} />
             <Link href="/login" className="hover:text-stone-600 transition">Sign in</Link>
             <Link href="/signup" className="hover:text-stone-600 transition">Sign up</Link>
           </div>
