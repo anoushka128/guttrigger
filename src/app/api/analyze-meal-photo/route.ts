@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
-import Anthropic from '@anthropic-ai/sdk'
+import { GoogleGenerativeAI } from '@google/generative-ai'
 import { createClient } from '@/lib/supabase/server'
 
-const anthropic = new Anthropic()
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
 
 export async function POST(request: Request) {
   const supabase = await createClient()
@@ -17,19 +17,16 @@ export async function POST(request: Request) {
   }
 
   try {
-    const response = await anthropic.messages.create({
-      model: 'claude-opus-4-6',
-      max_tokens: 1024,
-      messages: [{
-        role: 'user',
-        content: [
-          {
-            type: 'image',
-            source: { type: 'base64', media_type: mediaType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp', data: imageData },
-          },
-          {
-            type: 'text',
-            text: `Identify all the distinct food items visible in this meal photo.
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' })
+
+    const result = await model.generateContent([
+      {
+        inlineData: {
+          mimeType: mediaType,
+          data: imageData,
+        },
+      },
+      `Identify all the distinct food items visible in this meal photo.
 
 Return ONLY a valid JSON array, no explanation or markdown:
 [{"name": "specific food name", "portionSize": "Small" | "Medium" | "Large"}, ...]
@@ -39,12 +36,9 @@ Rules:
 - Estimate portion sizes as Small, Medium, or Large
 - Include every distinct food item visible
 - Return [] if no food is visible`,
-          },
-        ],
-      }],
-    })
+    ])
 
-    const text = response.content[0].type === 'text' ? response.content[0].text.trim() : '[]'
+    const text = result.response.text().trim()
 
     let foods = []
     try {
@@ -56,7 +50,7 @@ Rules:
 
     return NextResponse.json({ foods })
   } catch (err) {
-    console.error('Claude API error:', err)
+    console.error('Gemini API error:', err)
     return NextResponse.json({ error: 'Failed to analyze image' }, { status: 500 })
   }
 }
