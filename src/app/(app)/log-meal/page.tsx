@@ -1,8 +1,7 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState, useTransition, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import { createMeal } from '@/app/actions/meals'
 import { MEAL_TYPES } from '@/lib/utils'
 
@@ -66,6 +65,7 @@ const PORTION_SIZES = ['Small', 'Medium', 'Large'] as const
 export default function LogMealPage() {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
+  const photoInputRef = useRef<HTMLInputElement>(null)
 
   const { date: nowDate, time: nowTime } = getNow()
 
@@ -82,6 +82,13 @@ export default function LogMealPage() {
   })
   const [successBanner, setSuccessBanner] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Photo / AI detection state
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null)
+  const [photoFile, setPhotoFile] = useState<File | null>(null)
+  const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const [analyzeError, setAnalyzeError] = useState<string | null>(null)
+  const [detectedCount, setDetectedCount] = useState<number | null>(null)
 
   function updateField<K extends keyof FormData>(key: K, value: FormData[K]) {
     setFormData(prev => ({ ...prev, [key]: value }))
@@ -140,12 +147,73 @@ export default function LogMealPage() {
     }))
   }
 
+  function handlePhotoSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setPhotoFile(file)
+    setDetectedCount(null)
+    setAnalyzeError(null)
+    const reader = new FileReader()
+    reader.onload = (ev) => setPhotoPreview(ev.target?.result as string)
+    reader.readAsDataURL(file)
+  }
+
+  function clearPhoto() {
+    setPhotoPreview(null)
+    setPhotoFile(null)
+    setDetectedCount(null)
+    setAnalyzeError(null)
+    if (photoInputRef.current) photoInputRef.current.value = ''
+  }
+
+  async function handleDetectFoods() {
+    if (!photoFile || !photoPreview) return
+    setIsAnalyzing(true)
+    setAnalyzeError(null)
+    setDetectedCount(null)
+
+    try {
+      const base64 = photoPreview.split(',')[1]
+      const mediaType = photoFile.type
+
+      const res = await fetch('/api/analyze-meal-photo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageData: base64, mediaType }),
+      })
+
+      if (!res.ok) throw new Error('Failed to analyze image')
+
+      const { foods } = await res.json() as { foods: Array<{ name: string; portionSize?: string }> }
+
+      if (foods.length === 0) {
+        setAnalyzeError('No foods detected. You can add them manually below.')
+        setIsAnalyzing(false)
+        return
+      }
+
+      const newFoods: FoodItem[] = foods.map(f => ({
+        id: crypto.randomUUID(),
+        name: f.name,
+        portionSize: (['Small', 'Medium', 'Large'].includes(f.portionSize ?? '') ? f.portionSize : '') as FoodItem['portionSize'],
+        ingredients: [],
+        showIngredients: false,
+      }))
+
+      setFormData(prev => ({ ...prev, foods: newFoods }))
+      setDetectedCount(newFoods.length)
+    } catch {
+      setAnalyzeError('Could not analyze photo. Please add foods manually.')
+    } finally {
+      setIsAnalyzing(false)
+    }
+  }
+
   function handleLevelSelect(level: LogLevel) {
     setLogLevel(level)
     if (level === 1) {
-      // Quick: stay on step 1, just show title input
+      // Quick: stay on step 1
     } else {
-      // Standard / Detailed: go to step 2
       setStep(2)
     }
   }
@@ -355,6 +423,81 @@ export default function LogMealPage() {
             />
           </div>
 
+          {/* Photo + AI detection */}
+          <div className="bg-white rounded-2xl border border-stone-100 shadow-sm p-5">
+            <h2 className="text-sm font-semibold text-stone-700 mb-3">
+              Scan photo with AI
+              <span className="ml-2 text-xs font-normal text-stone-400">(optional)</span>
+            </h2>
+
+            {!photoPreview ? (
+              <label className="flex flex-col items-center justify-center w-full h-28 border-2 border-dashed border-stone-200 rounded-xl cursor-pointer hover:border-emerald-300 hover:bg-emerald-50/50 transition">
+                <span className="text-2xl mb-1.5">📷</span>
+                <span className="text-xs font-medium text-stone-500">Tap to upload a photo</span>
+                <span className="text-xs text-stone-400 mt-0.5">AI will detect the foods for you</span>
+                <input
+                  ref={photoInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handlePhotoSelect}
+                  className="hidden"
+                />
+              </label>
+            ) : (
+              <div className="space-y-3">
+                {/* Photo preview */}
+                <div className="relative">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={photoPreview}
+                    alt="Meal photo"
+                    className="w-full h-48 object-cover rounded-xl"
+                  />
+                  <button
+                    type="button"
+                    onClick={clearPhoto}
+                    className="absolute top-2 right-2 w-7 h-7 flex items-center justify-center rounded-full bg-black/50 text-white text-lg leading-none hover:bg-black/70 transition"
+                    aria-label="Remove photo"
+                  >
+                    ×
+                  </button>
+                </div>
+
+                {/* Detect button */}
+                <button
+                  type="button"
+                  onClick={handleDetectFoods}
+                  disabled={isAnalyzing}
+                  className="w-full flex items-center justify-center gap-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-xl px-4 py-2.5 transition"
+                >
+                  {isAnalyzing ? (
+                    <>
+                      <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                      </svg>
+                      Detecting foods…
+                    </>
+                  ) : (
+                    <>
+                      <span>✨</span>
+                      {detectedCount !== null ? 'Re-detect foods' : 'Detect foods with AI'}
+                    </>
+                  )}
+                </button>
+
+                {detectedCount !== null && (
+                  <p className="text-xs text-emerald-600 font-medium text-center">
+                    {detectedCount} food{detectedCount !== 1 ? 's' : ''} detected — edit below if needed
+                  </p>
+                )}
+                {analyzeError && (
+                  <p className="text-xs text-red-500 text-center">{analyzeError}</p>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* Location */}
           <div className="bg-white rounded-2xl border border-stone-100 shadow-sm p-5">
             <h2 className="text-sm font-semibold text-stone-700 mb-3">Location</h2>
@@ -387,7 +530,7 @@ export default function LogMealPage() {
 
             {formData.foods.length === 0 && (
               <p className="text-sm text-stone-400 text-center py-4">
-                No foods added yet. Tap "Add food" to start.
+                Upload a photo above to auto-detect, or tap &quot;Add food&quot; to add manually.
               </p>
             )}
 
