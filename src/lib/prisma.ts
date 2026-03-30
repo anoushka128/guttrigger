@@ -6,7 +6,11 @@ const globalForPrisma = globalThis as unknown as {
 }
 
 function createPrismaClient() {
-  const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! })
+  const connectionString = process.env.DATABASE_URL!
+  const adapter = new PrismaPg({
+    connectionString,
+    ssl: connectionString.includes('supabase.com') ? { rejectUnauthorized: false } : undefined,
+  })
   return new PrismaClient({ adapter })
 }
 
