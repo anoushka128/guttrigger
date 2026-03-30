@@ -39,7 +39,7 @@ export async function proxy(request: NextRequest) {
     pathname.startsWith('/dashboard') ||
     pathname.startsWith('/log-meal') ||
     pathname.startsWith('/log-symptom') ||
-    pathname.startsWith('/log') ||
+    pathname === '/log' ||
     pathname.startsWith('/insights') ||
     pathname.startsWith('/timeline') ||
     pathname.startsWith('/settings') ||
