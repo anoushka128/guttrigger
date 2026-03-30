@@ -6,7 +6,6 @@ import PeriodSelector from './_components/PeriodSelector'
 import InsightCharts from './_components/InsightCharts'
 import TriggerFoodCard from './_components/TriggerFoodCard'
 import RunAnalysisButton from './_components/RunAnalysisButton'
-import Badge from '@/components/ui/Badge'
 
 function capitalize(str: string): string {
   if (!str) return str
@@ -23,6 +22,9 @@ interface AnalysisResultRow {
   confidenceScore: number
   suspicionLevel: string
   linkedSymptoms: string[]
+  consistency: number
+  dominantOnset: string | null
+  updatedAt: Date
 }
 
 interface MealRow {
@@ -38,25 +40,33 @@ interface SymptomRow {
   categories: string[]
 }
 
-function generateSummaries(
-  results: AnalysisResultRow[],
-  meals: MealRow[],
-): string[] {
+function generateSummaries(results: AnalysisResultRow[], meals: MealRow[]): string[] {
   const summaries: string[] = []
 
   for (const result of results.slice(0, 5)) {
     if (result.suspicionLevel === 'high' || result.suspicionLevel === 'moderate') {
-      const linkedText = result.linkedSymptoms.slice(0, 2).join(' and ')
+      const linkedText = result.linkedSymptoms
+        .slice(0, 2)
+        .map(s => s.replace(/_/g, ' '))
+        .join(' and ')
+      const onsetMap: Record<string, string> = {
+        immediate: 'immediately after eating',
+        within_1hr: 'within 1 hour',
+        within_2_4hr: '2–4 hours later',
+        later_that_day: 'later the same day',
+        next_morning: 'the next morning',
+      }
+      const onset = result.dominantOnset ? onsetMap[result.dominantOnset] : null
       summaries.push(
-        `${capitalize(result.foodName)} appeared in ${result.exposureCount} meals with symptoms in ${result.symptomCount} cases${linkedText ? `, often linked to ${linkedText}` : ''}.`,
+        `${capitalize(result.foodName)} appeared in ${result.exposureCount} meal${result.exposureCount !== 1 ? 's' : ''} and was followed by symptoms in ${result.symptomCount} of them${onset ? ', typically ' + onset : ''}${linkedText ? ' — mainly ' + linkedText : ''}.`
       )
     } else if (result.suspicionLevel === 'probably_safe') {
       summaries.push(
-        `${capitalize(result.foodName)} appears low risk — ${result.exposureCount} exposures with minimal symptoms.`,
+        `${capitalize(result.foodName)} has been eaten ${result.exposureCount} time${result.exposureCount !== 1 ? 's' : ''} without triggering notable symptoms — looks safe so far.`
       )
     } else if (result.exposureCount === 1) {
       summaries.push(
-        `Not enough data on ${capitalize(result.foodName)} yet. Try logging more meals that include it.`,
+        `Only one logged exposure to ${capitalize(result.foodName)}. Log more meals containing it to build a pattern.`
       )
     }
   }
@@ -64,7 +74,7 @@ function generateSummaries(
   const restaurantMeals = meals.filter((m: MealRow) => m.location === 'restaurant')
   if (restaurantMeals.length >= 3) {
     summaries.push(
-      'Consider tracking whether symptoms differ between home-cooked and restaurant meals.',
+      'Consider tracking whether symptoms differ between home-cooked and restaurant meals — hidden ingredients may be a factor.'
     )
   }
 
@@ -135,62 +145,183 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
     .slice(0, 8)
 
   const triggerFoods = analysisResults.filter(
-    (r: AnalysisResultRow) => r.suspicionLevel === 'high' || r.suspicionLevel === 'moderate',
+    (r) => r.suspicionLevel === 'high' || r.suspicionLevel === 'moderate'
   )
-  const safeFoods = analysisResults.filter(
-    (r: AnalysisResultRow) => r.suspicionLevel === 'probably_safe',
-  )
-
+  const safeFoods = analysisResults.filter((r) => r.suspicionLevel === 'probably_safe')
+  const insufficientFoods = analysisResults.filter((r) => r.suspicionLevel === 'insufficient_data')
   const summaries = generateSummaries(analysisResults, allMeals)
+
+  // Last analysis timestamp
+  const lastAnalyzed = analysisResults[0]?.updatedAt
+    ? format(new Date(analysisResults[0].updatedAt), 'MMM d, h:mm a')
+    : null
+
+  const totalMeals = await prisma.meal.count({ where: { userId: user.id } })
+  const totalSymptoms = await prisma.symptom.count({ where: { userId: user.id } })
 
   return (
     <div className="pt-6 pb-8 space-y-5">
       {/* Header */}
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-stone-900">Your Insights</h1>
           <p className="text-sm text-stone-500 mt-0.5">
-            Patterns from the last {days} days
+            {lastAnalyzed ? `Last analyzed ${lastAnalyzed}` : `Patterns from the last ${days} days`}
           </p>
         </div>
         <PeriodSelector current={period} />
       </div>
 
+      {/* Data completeness nudge */}
+      {(totalMeals < 5 || totalSymptoms < 3) && (
+        <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4">
+          <div className="flex items-start gap-3">
+            <span className="text-lg flex-shrink-0">🌱</span>
+            <div>
+              <p className="text-xs font-bold text-emerald-700 uppercase tracking-wide mb-1">Still building your data</p>
+              <p className="text-sm text-stone-700 leading-relaxed">
+                {totalMeals < 5
+                  ? `Log at least ${5 - totalMeals} more meal${5 - totalMeals !== 1 ? 's' : ''} to start seeing patterns.`
+                  : `Log symptoms when you feel unwell — you need at least 3 symptom events to identify triggers.`}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Charts */}
       <InsightCharts symptomTrend={symptomTrend} symptomBreakdown={symptomBreakdown} />
 
-      {/* Top Trigger Foods */}
-      <div className="bg-white rounded-2xl border border-stone-100 shadow-sm p-5">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-base font-semibold text-stone-900">Possible Trigger Foods</h2>
-          <span className="text-xs text-stone-400">{triggerFoods.length} found</span>
+      {/* Observations */}
+      {summaries.length > 0 && (
+        <div className="bg-white rounded-2xl border border-stone-100 shadow-sm p-5">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-base">✨</span>
+            <h2 className="text-sm font-semibold text-stone-900">Observations</h2>
+          </div>
+          <p className="text-xs text-stone-400 mb-4">Patterns detected in your logged data</p>
+          <ul className="space-y-3">
+            {summaries.map((summary, i) => (
+              <li key={i} className="flex gap-3">
+                <span className="text-emerald-500 mt-0.5 flex-shrink-0 text-sm">•</span>
+                <p className="text-sm text-stone-600 leading-relaxed">{summary}</p>
+              </li>
+            ))}
+          </ul>
         </div>
-        {triggerFoods.length === 0 ? (
-          <p className="text-sm text-stone-400 text-center py-6">
-            No trigger foods identified yet — keep logging meals and symptoms
+      )}
+
+      {/* Trigger Foods */}
+      <div>
+        <div className="mb-3">
+          <h2 className="text-base font-semibold text-stone-900">Possible trigger foods</h2>
+          <p className="text-xs text-stone-400 mt-0.5">
+            Foods correlated with your symptoms — not confirmed triggers
           </p>
+        </div>
+
+        {triggerFoods.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-stone-100 shadow-sm p-8 text-center">
+            <p className="text-3xl mb-3">🔍</p>
+            <p className="text-sm font-medium text-stone-700 mb-2">No trigger patterns found yet</p>
+            <p className="text-xs text-stone-400 leading-relaxed max-w-xs mx-auto">
+              {totalMeals < 3
+                ? 'Log at least 3 meals containing specific foods to begin analysis.'
+                : totalSymptoms < 2
+                  ? 'Log symptoms when you feel unwell — the app needs symptom data to find correlations.'
+                  : 'Keep logging consistently. Patterns typically emerge after 1–2 weeks of daily tracking.'}
+            </p>
+          </div>
         ) : (
           <div className="space-y-3">
-            {triggerFoods.map((food: AnalysisResultRow) => (
-              <TriggerFoodCard key={food.id} food={food} />
+            {triggerFoods.map((food) => (
+              <TriggerFoodCard
+                key={food.id}
+                foodName={food.foodName}
+                suspicionLevel={food.suspicionLevel}
+                exposureCount={food.exposureCount}
+                symptomCount={food.symptomCount}
+                avgSeverity={food.avgSeverity}
+                confidenceScore={food.confidenceScore}
+                consistency={food.consistency}
+                linkedSymptoms={food.linkedSymptoms}
+                dominantOnset={food.dominantOnset}
+              />
             ))}
           </div>
         )}
       </div>
 
-      {/* Food-symptom connections */}
-      {triggerFoods.some((f: AnalysisResultRow) => f.linkedSymptoms.length > 0) && (
+      {/* Safe Foods */}
+      <div>
+        <div className="mb-3">
+          <h2 className="text-base font-semibold text-stone-900">Safe foods</h2>
+          <p className="text-xs text-stone-400 mt-0.5">
+            Eaten multiple times without notable symptoms
+          </p>
+        </div>
+
+        {safeFoods.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-stone-100 shadow-sm p-6 text-center">
+            <p className="text-2xl mb-2">✅</p>
+            <p className="text-sm font-medium text-stone-600 mb-1">No safe foods confirmed yet</p>
+            <p className="text-xs text-stone-400">
+              Foods you eat regularly without symptoms will appear here as you log more data.
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-2">
+            {safeFoods.map((food) => (
+              <div
+                key={food.id}
+                className="flex items-center gap-3 bg-emerald-50 border border-emerald-100 rounded-2xl p-4"
+              >
+                <div className="w-2 h-2 rounded-full bg-emerald-400 flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-stone-900 capitalize">{capitalize(food.foodName)}</p>
+                  <p className="text-xs text-stone-500 mt-0.5">
+                    {food.exposureCount} exposures · avg severity {food.avgSeverity.toFixed(1)}/10
+                  </p>
+                </div>
+                <span className="text-xs font-semibold text-emerald-600 bg-white border border-emerald-100 px-2.5 py-1 rounded-full">
+                  Probably safe
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Insufficient data foods */}
+      {insufficientFoods.length > 0 && (
         <div className="bg-white rounded-2xl border border-stone-100 shadow-sm p-5">
-          <h2 className="text-base font-semibold text-stone-900 mb-4">
-            Food&ndash;Symptom Connections
-          </h2>
+          <h2 className="text-sm font-semibold text-stone-900 mb-1">Needs more data</h2>
+          <p className="text-xs text-stone-400 mb-3">Log more meals containing these foods to build a pattern</p>
+          <div className="flex flex-wrap gap-2">
+            {insufficientFoods.slice(0, 8).map(food => (
+              <span
+                key={food.id}
+                className="bg-stone-50 border border-stone-100 text-stone-600 text-xs font-medium px-3 py-1.5 rounded-xl capitalize"
+              >
+                {capitalize(food.foodName)} ({food.exposureCount}×)
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Food-symptom connections */}
+      {triggerFoods.some((f) => f.linkedSymptoms.length > 0) && (
+        <div className="bg-white rounded-2xl border border-stone-100 shadow-sm p-5">
+          <h2 className="text-sm font-semibold text-stone-900 mb-1">Food–symptom connections</h2>
+          <p className="text-xs text-stone-400 mb-4">Which symptoms each food is associated with</p>
           <div className="space-y-4">
             {triggerFoods
-              .filter((f: AnalysisResultRow) => f.linkedSymptoms.length > 0)
+              .filter((f) => f.linkedSymptoms.length > 0)
               .slice(0, 5)
-              .map((food: AnalysisResultRow) => (
+              .map((food) => (
                 <div key={food.id}>
-                  <p className="text-sm font-medium text-stone-800 capitalize mb-1.5">
+                  <p className="text-sm font-semibold text-stone-800 capitalize mb-2">
                     {capitalize(food.foodName)}
                   </p>
                   <div className="flex flex-wrap gap-1.5">
@@ -212,67 +343,20 @@ export default async function InsightsPage({ searchParams }: InsightsPageProps) 
         </div>
       )}
 
-      {/* Safe Foods */}
-      <div className="bg-white rounded-2xl border border-stone-100 shadow-sm p-5">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-base font-semibold text-stone-900">Safe Foods</h2>
-          <span className="text-xs text-stone-400">{safeFoods.length} identified</span>
-        </div>
-        {safeFoods.length === 0 ? (
-          <p className="text-sm text-stone-400 text-center py-6">
-            Keep logging to identify your safe foods
-          </p>
-        ) : (
-          <div className="grid grid-cols-1 gap-2">
-            {safeFoods.map((food: AnalysisResultRow) => (
-              <div
-                key={food.id}
-                className="flex items-center gap-3 bg-emerald-50 border border-emerald-100 rounded-xl p-3"
-              >
-                <div className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-stone-900 capitalize truncate">
-                    {capitalize(food.foodName)}
-                  </p>
-                  <p className="text-xs text-stone-500">
-                    {food.exposureCount} exposures &middot; avg severity{' '}
-                    {food.avgSeverity.toFixed(1)}/10
-                  </p>
-                </div>
-                <Badge level="probably_safe" />
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* AI-style summaries */}
-      {summaries.length > 0 && (
-        <div className="bg-white rounded-2xl border border-stone-100 shadow-sm p-5">
-          <div className="flex items-center gap-2 mb-4">
-            <span className="text-base">&#10024;</span>
-            <h2 className="text-base font-semibold text-stone-900">Observations</h2>
-          </div>
-          <ul className="space-y-3">
-            {summaries.map((summary, i) => (
-              <li key={i} className="flex gap-3">
-                <span className="text-emerald-500 mt-0.5 shrink-0 text-sm">&bull;</span>
-                <p className="text-sm text-stone-600 leading-relaxed">{summary}</p>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
       {/* Run Analysis */}
       <div className="bg-white rounded-2xl border border-stone-100 shadow-sm p-5">
-        <h2 className="text-base font-semibold text-stone-900 mb-1">
-          Refresh Analysis
-        </h2>
+        <h2 className="text-sm font-semibold text-stone-900 mb-1">Refresh analysis</h2>
         <p className="text-sm text-stone-500 mb-4">
           Re-run the analysis to incorporate your latest logs.
         </p>
         <RunAnalysisButton />
+      </div>
+
+      {/* Disclaimer */}
+      <div className="bg-stone-50 rounded-2xl border border-stone-100 p-4">
+        <p className="text-xs text-stone-400 leading-relaxed">
+          ⚕️ Insights show statistical correlations in your personal data. They are not medical diagnoses and should not be used to make dietary changes without consulting a qualified healthcare provider.
+        </p>
       </div>
     </div>
   )

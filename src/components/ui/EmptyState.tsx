@@ -1,54 +1,26 @@
-import { type LucideIcon } from 'lucide-react'
-import Button from './Button'
-
 interface EmptyStateProps {
-  icon: LucideIcon
+  icon: string
   title: string
   description: string
-  ctaLabel?: string
-  onCtaClick?: () => void
-  ctaHref?: string
-  className?: string
+  action?: { label: string; href: string }
+  hint?: string
 }
 
-export default function EmptyState({
-  icon: Icon,
-  title,
-  description,
-  ctaLabel,
-  onCtaClick,
-  className = '',
-}: EmptyStateProps) {
-  const hasCta = ctaLabel && onCtaClick
-
+export default function EmptyState({ icon, title, description, action, hint }: EmptyStateProps) {
   return (
-    <div
-      className={[
-        'flex flex-col items-center justify-center text-center px-6 py-16 gap-4',
-        className,
-      ]
-        .filter(Boolean)
-        .join(' ')}
-    >
-      <div className="flex items-center justify-center w-16 h-16 rounded-2xl bg-stone-100">
-        <Icon size={28} className="text-stone-400" strokeWidth={1.5} />
-      </div>
-
-      <div className="flex flex-col gap-1.5 max-w-xs">
-        <h3 className="text-base font-semibold text-stone-900">{title}</h3>
-        <p className="text-sm text-stone-500 leading-relaxed">{description}</p>
-      </div>
-
-      {hasCta && (
-        <Button
-          variant="primary"
-          size="md"
-          onClick={onCtaClick}
-          className="mt-2"
+    <div className="flex flex-col items-center justify-center text-center py-10 px-4">
+      <span className="text-4xl mb-3">{icon}</span>
+      <h3 className="text-base font-semibold text-stone-800 mb-2">{title}</h3>
+      <p className="text-sm text-stone-500 leading-relaxed max-w-xs mb-4">{description}</p>
+      {action && (
+        <a
+          href={action.href}
+          className="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition"
         >
-          {ctaLabel}
-        </Button>
+          {action.label}
+        </a>
       )}
+      {hint && <p className="text-xs text-stone-400 mt-3">{hint}</p>}
     </div>
   )
 }

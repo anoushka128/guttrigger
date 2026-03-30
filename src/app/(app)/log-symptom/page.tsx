@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useTransition, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useTransition, useEffect, useRef } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { createSymptom } from '@/app/actions/symptoms'
 import { SYMPTOM_CATEGORIES, ONSET_OPTIONS } from '@/lib/utils'
+import { Suspense } from 'react'
 
 function getNowLocal() {
   const now = new Date()
@@ -21,6 +22,14 @@ const DURATION_OPTIONS = [
 
 const ALERT_CATEGORIES = ['rash', 'swelling']
 
+const QUICK_PRESETS = [
+  { id: 'bloating', emoji: '🫧', label: 'Bloating', severity: 5 },
+  { id: 'stomach_pain', emoji: '😣', label: 'Stomach Pain', severity: 6 },
+  { id: 'gas', emoji: '💨', label: 'Gas', severity: 4 },
+  { id: 'nausea', emoji: '🤢', label: 'Nausea', severity: 5 },
+  { id: 'fatigue', emoji: '😴', label: 'Fatigue', severity: 4 },
+]
+
 interface TodayMeal {
   id: string
   title: string
@@ -29,32 +38,41 @@ interface TodayMeal {
 }
 
 function getSeverityLabel(value: number) {
-  if (value >= 7) return { label: 'Severe', color: 'text-red-600', bg: 'bg-red-100' }
-  if (value >= 4) return { label: 'Moderate', color: 'text-amber-600', bg: 'bg-amber-100' }
-  return { label: 'Mild', color: 'text-emerald-700', bg: 'bg-emerald-100' }
+  if (value >= 8) return { label: 'Severe 😫', color: 'text-red-600', bg: 'bg-red-100' }
+  if (value >= 6) return { label: 'High 😰', color: 'text-red-500', bg: 'bg-red-50' }
+  if (value >= 4) return { label: 'Moderate 😕', color: 'text-amber-600', bg: 'bg-amber-100' }
+  if (value >= 2) return { label: 'Mild 😐', color: 'text-yellow-600', bg: 'bg-yellow-100' }
+  return { label: 'Very mild 🙂', color: 'text-emerald-700', bg: 'bg-emerald-100' }
 }
 
-export default function LogSymptomPage() {
+function LogSymptomInner() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [isPending, startTransition] = useTransition()
 
+  // Read quick preset from URL params
+  const quickParam = searchParams.get('quick')
+  const severityParam = searchParams.get('severity')
+  const initialSeverity = severityParam ? Math.min(10, Math.max(1, parseInt(severityParam, 10))) : 5
+  const initialCategories = quickParam ? [quickParam] : []
+
   const [timeStarted, setTimeStarted] = useState(getNowLocal)
-  const [severity, setSeverity] = useState(3)
-  const [categories, setCategories] = useState<string[]>([])
+  const [severity, setSeverity] = useState(initialSeverity)
+  const [categories, setCategories] = useState<string[]>(initialCategories)
   const [onset, setOnset] = useState('')
   const [duration, setDuration] = useState('')
   const [linkedMealIds, setLinkedMealIds] = useState<string[]>([])
   const [notes, setNotes] = useState('')
-  const [todayMeals, setTodayMeals] = useState<TodayMeal[]>([])
+  const [todayMeals] = useState<TodayMeal[]>([])
   const [error, setError] = useState<string | null>(null)
   const [successBanner, setSuccessBanner] = useState(false)
 
-  // We don't have a client-side meals fetch action, so todayMeals stays empty
-  // unless a server action is available. We'll leave this as a placeholder.
-  useEffect(() => {
-    // Meals would be loaded from a server action or passed as props
-    // For now, this section gracefully renders empty
-  }, [])
+  function applyPreset(id: string, presetSeverity: number) {
+    setCategories(prev =>
+      prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id]
+    )
+    setSeverity(presetSeverity)
+  }
 
   function toggleCategory(id: string) {
     setCategories(prev =>
@@ -115,7 +133,7 @@ export default function LogSymptomPage() {
             <path d="M10 12L6 8l4-4" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </button>
-        <h1 className="text-xl font-semibold text-stone-900">Log a Symptom</h1>
+        <h1 className="text-xl font-bold text-stone-900">Log a Symptom</h1>
       </div>
 
       {/* Success banner */}
@@ -141,15 +159,25 @@ export default function LogSymptomPage() {
       )}
 
       <div className="space-y-5">
-        {/* Time started */}
+        {/* Quick presets */}
         <div className="bg-white rounded-2xl border border-stone-100 shadow-sm p-5">
-          <label className="block text-sm font-semibold text-stone-700 mb-2">Time started</label>
-          <input
-            type="datetime-local"
-            value={timeStarted}
-            onChange={e => setTimeStarted(e.target.value)}
-            className="w-full border border-stone-200 rounded-xl px-4 py-2.5 text-sm text-stone-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition"
-          />
+          <h2 className="text-sm font-semibold text-stone-700 mb-1">Quick presets</h2>
+          <p className="text-xs text-stone-400 mb-3">Tap a symptom to select it instantly</p>
+          <div className="flex flex-wrap gap-2">
+            {QUICK_PRESETS.map(p => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => applyPreset(p.id, p.severity)}
+                className={[
+                  chipBase,
+                  categories.includes(p.id) ? chipSelected : chipUnselected,
+                ].join(' ')}
+              >
+                <span className="mr-1">{p.emoji}</span> {p.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Severity slider */}
@@ -190,8 +218,8 @@ export default function LogSymptomPage() {
                     ? n >= 7
                       ? 'bg-red-500 text-white scale-110'
                       : n >= 4
-                      ? 'bg-amber-400 text-white scale-110'
-                      : 'bg-emerald-500 text-white scale-110'
+                        ? 'bg-amber-400 text-white scale-110'
+                        : 'bg-emerald-500 text-white scale-110'
                     : 'bg-stone-100 text-stone-500 hover:bg-stone-200',
                 ].join(' ')}
               >
@@ -224,6 +252,17 @@ export default function LogSymptomPage() {
               </button>
             ))}
           </div>
+        </div>
+
+        {/* Time started */}
+        <div className="bg-white rounded-2xl border border-stone-100 shadow-sm p-5">
+          <label className="block text-sm font-semibold text-stone-700 mb-2">Time started</label>
+          <input
+            type="datetime-local"
+            value={timeStarted}
+            onChange={e => setTimeStarted(e.target.value)}
+            className="w-full border border-stone-200 rounded-xl px-4 py-2.5 text-sm text-stone-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition"
+          />
         </div>
 
         {/* Onset */}
@@ -349,5 +388,13 @@ export default function LogSymptomPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function LogSymptomPage() {
+  return (
+    <Suspense fallback={<div className="pt-6 pb-32 text-center text-stone-400 text-sm">Loading…</div>}>
+      <LogSymptomInner />
+    </Suspense>
   )
 }
