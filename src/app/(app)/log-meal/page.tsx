@@ -166,6 +166,33 @@ export default function LogMealPage() {
     if (photoInputRef.current) photoInputRef.current.value = ''
   }
 
+  // Compress image to JPEG at max 1024px to stay within Gemini limits
+  function compressImage(file: File): Promise<{ base64: string; mediaType: string }> {
+    return new Promise((resolve, reject) => {
+      const img = new Image()
+      const url = URL.createObjectURL(file)
+      img.onload = () => {
+        URL.revokeObjectURL(url)
+        const MAX = 1024
+        let { width, height } = img
+        if (width > MAX || height > MAX) {
+          if (width > height) { height = Math.round(height * MAX / width); width = MAX }
+          else { width = Math.round(width * MAX / height); height = MAX }
+        }
+        const canvas = document.createElement('canvas')
+        canvas.width = width
+        canvas.height = height
+        const ctx = canvas.getContext('2d')
+        if (!ctx) { reject(new Error('Canvas not supported')); return }
+        ctx.drawImage(img, 0, 0, width, height)
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85)
+        resolve({ base64: dataUrl.split(',')[1], mediaType: 'image/jpeg' })
+      }
+      img.onerror = reject
+      img.src = url
+    })
+  }
+
   async function handleDetectFoods() {
     if (!photoFile || !photoPreview) return
     setIsAnalyzing(true)
@@ -173,8 +200,7 @@ export default function LogMealPage() {
     setDetectedCount(null)
 
     try {
-      const base64 = photoPreview.split(',')[1]
-      const mediaType = photoFile.type
+      const { base64, mediaType } = await compressImage(photoFile)
 
       const res = await fetch('/api/analyze-meal-photo', {
         method: 'POST',
@@ -182,9 +208,13 @@ export default function LogMealPage() {
         body: JSON.stringify({ imageData: base64, mediaType }),
       })
 
-      if (!res.ok) throw new Error('Failed to analyze image')
+      const data = await res.json() as { foods?: Array<{ name: string; portionSize?: string }>; error?: string }
 
-      const { foods } = await res.json() as { foods: Array<{ name: string; portionSize?: string }> }
+      if (!res.ok) {
+        throw new Error(data.error ?? 'Failed to analyze image')
+      }
+
+      const foods = data.foods ?? []
 
       if (foods.length === 0) {
         setAnalyzeError('No foods detected. You can add them manually below.')
@@ -202,8 +232,9 @@ export default function LogMealPage() {
 
       setFormData(prev => ({ ...prev, foods: newFoods }))
       setDetectedCount(newFoods.length)
-    } catch {
-      setAnalyzeError('Could not analyze photo. Please add foods manually.')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Could not analyze photo'
+      setAnalyzeError(msg)
     } finally {
       setIsAnalyzing(false)
     }

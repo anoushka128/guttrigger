@@ -2,8 +2,6 @@ import { NextResponse } from 'next/server'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { createClient } from '@/lib/supabase/server'
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
-
 export async function POST(request: Request) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -11,18 +9,28 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  if (!process.env.GEMINI_API_KEY) {
+    console.error('GEMINI_API_KEY is not set')
+    return NextResponse.json({ error: 'AI service not configured' }, { status: 500 })
+  }
+
   const { imageData, mediaType } = await request.json()
   if (!imageData || !mediaType) {
     return NextResponse.json({ error: 'Missing imageData or mediaType' }, { status: 400 })
   }
 
+  // Gemini only supports these image types
+  const supportedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+  const resolvedType = supportedTypes.includes(mediaType) ? mediaType : 'image/jpeg'
+
   try {
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
     const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' })
 
     const result = await model.generateContent([
       {
         inlineData: {
-          mimeType: mediaType,
+          mimeType: resolvedType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
           data: imageData,
         },
       },
@@ -39,6 +47,7 @@ Rules:
     ])
 
     const text = result.response.text().trim()
+    console.log('Gemini raw response:', text)
 
     let foods = []
     try {
@@ -50,7 +59,8 @@ Rules:
 
     return NextResponse.json({ foods })
   } catch (err) {
-    console.error('Gemini API error:', err)
-    return NextResponse.json({ error: 'Failed to analyze image' }, { status: 500 })
+    const message = err instanceof Error ? err.message : String(err)
+    console.error('Gemini API error:', message)
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }
