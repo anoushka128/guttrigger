@@ -5,6 +5,7 @@ import { useActionState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Suspense } from 'react'
 import { login } from '@/app/actions/auth'
+import Logo from '@/components/Logo'
 
 function LoginForm() {
   const [state, action, pending] = useActionState(login, undefined)
@@ -15,11 +16,8 @@ function LoginForm() {
     <div className="w-full max-w-sm">
       {/* Wordmark */}
       <div className="text-center mb-8">
-        <div className="flex items-center justify-center gap-2 mb-3">
-          <span className="text-2xl" role="img" aria-label="leaf">🌿</span>
-          <span className="text-2xl font-semibold tracking-tight text-stone-900">
-            GutTrigger
-          </span>
+        <div className="flex items-center justify-center mb-3">
+          <Logo size={32} showText={true} />
         </div>
         <p className="text-stone-500 text-sm">
           Know what your body is telling you.
@@ -37,7 +35,7 @@ function LoginForm() {
           {(state?.error || dbError) && (
             <div className="rounded-xl bg-red-50 border border-red-100 px-4 py-3 text-sm text-red-600">
               {dbError
-                ? 'Database not connected. Fill in DATABASE_URL in .env.local and run npm run db:push.'
+                ? 'Something went wrong on our end. Please try again in a moment.'
                 : state?.error}
             </div>
           )}

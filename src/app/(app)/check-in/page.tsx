@@ -138,7 +138,7 @@ export default function CheckInPage() {
   }
 
   return (
-    <div className="pt-6 pb-32">
+    <div className="pt-6 pb-40">
       {/* Header */}
       <div className="flex items-center gap-3 mb-6">
         <button
@@ -344,14 +344,14 @@ export default function CheckInPage() {
         </div>
       </div>
 
-      {/* Sticky bottom button */}
-      <div className="fixed bottom-0 left-0 right-0 bg-stone-50/90 backdrop-blur-sm border-t border-stone-100 px-4 py-4">
+      {/* Sticky bottom button — sits above the bottom nav (nav is h-16 + safe area) */}
+      <div className="fixed bottom-16 left-0 right-0 bg-stone-50/95 backdrop-blur-sm border-t border-stone-100 px-4 py-3 pb-safe">
         <div className="mx-auto max-w-2xl">
           <button
             type="button"
             onClick={handleSubmit}
             disabled={isPending}
-            className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed text-white font-semibold text-sm rounded-2xl px-4 py-3.5 transition"
+            className="w-full bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 disabled:opacity-60 disabled:cursor-not-allowed text-white font-semibold text-sm rounded-2xl px-4 py-3.5 transition shadow-sm shadow-emerald-200"
           >
             {isPending ? 'Saving…' : 'Save Check-in'}
           </button>
