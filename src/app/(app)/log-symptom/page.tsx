@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useTransition, useEffect, useRef } from 'react'
+import { useState, useTransition } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createSymptom } from '@/app/actions/symptoms'
 import { SYMPTOM_CATEGORIES, ONSET_OPTIONS } from '@/lib/utils'
 import { Suspense } from 'react'
+import SevereSymptomAlert from '@/components/SevereSymptomAlert'
 
 function getNowLocal() {
   const now = new Date()
@@ -20,7 +21,22 @@ const DURATION_OPTIONS = [
   { id: 'all_day', label: 'All day' },
 ]
 
+// Categories that individually suggest possible allergic / anaphylactic reactions
 const ALERT_CATEGORIES = ['rash', 'swelling']
+
+// Combinations: if any of these pairs co-occur, also show the anaphylaxis alert
+const ANAPHYLAXIS_PAIRS: [string, string][] = [
+  ['rash', 'nausea'],
+  ['rash', 'stomach_pain'],
+  ['swelling', 'nausea'],
+  ['swelling', 'stomach_pain'],
+]
+
+function hasAnaphylaxisCombination(selected: string[]): boolean {
+  return ANAPHYLAXIS_PAIRS.some(
+    ([a, b]) => selected.includes(a) && selected.includes(b)
+  )
+}
 
 const QUICK_PRESETS = [
   { id: 'bloating', emoji: '🫧', label: 'Bloating', severity: 5 },
@@ -86,7 +102,9 @@ function LogSymptomInner() {
     )
   }
 
-  const showAlert = categories.some(c => ALERT_CATEGORIES.includes(c))
+  const showAlert =
+    categories.some(c => ALERT_CATEGORIES.includes(c)) ||
+    hasAnaphylaxisCombination(categories)
   const { label: sevLabel, color: sevColor, bg: sevBg } = getSeverityLabel(severity)
 
   async function handleSubmit() {
@@ -120,7 +138,7 @@ function LogSymptomInner() {
   const chipUnselected = 'bg-white border-stone-200 text-stone-600 hover:border-emerald-300 hover:bg-emerald-50/60'
 
   return (
-    <div className="pt-6 pb-32">
+    <div className="pt-6 pb-40">
       {/* Header */}
       <div className="flex items-center gap-3 mb-6">
         <button
@@ -150,11 +168,13 @@ function LogSymptomInner() {
         </div>
       )}
 
-      {/* Severe alert */}
+      {/* Anaphylaxis / severe symptom alert */}
       {showAlert && (
-        <div className="mb-4 rounded-2xl bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800 leading-relaxed">
-          <p className="font-semibold mb-0.5">Some symptoms may need immediate attention.</p>
-          <p>If you&apos;re experiencing throat tightness, trouble breathing, or severe reactions, seek medical attention now.</p>
+        <div className="mb-4">
+          <SevereSymptomAlert />
+          <p className="text-xs text-stone-400 mt-2 px-1">
+            ⚠️ If you are experiencing throat tightness, difficulty breathing, or lip/tongue swelling, call emergency services immediately.
+          </p>
         </div>
       )}
 
@@ -374,14 +394,14 @@ function LogSymptomInner() {
         </div>
       </div>
 
-      {/* Sticky bottom button */}
-      <div className="fixed bottom-0 left-0 right-0 bg-stone-50/90 backdrop-blur-sm border-t border-stone-100 px-4 py-4">
+      {/* Sticky bottom button — sits above the bottom nav */}
+      <div className="fixed bottom-16 left-0 right-0 bg-stone-50/95 backdrop-blur-sm border-t border-stone-100 px-4 py-3">
         <div className="mx-auto max-w-2xl">
           <button
             type="button"
             onClick={handleSubmit}
             disabled={isPending || successBanner}
-            className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed text-white font-semibold text-sm rounded-2xl px-4 py-3.5 transition"
+            className="w-full bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 disabled:opacity-60 disabled:cursor-not-allowed text-white font-semibold text-sm rounded-2xl px-4 py-3.5 transition shadow-sm shadow-emerald-200"
           >
             {isPending ? 'Saving…' : 'Save Symptom'}
           </button>

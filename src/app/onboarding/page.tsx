@@ -81,13 +81,14 @@ function StepDots({ current, total }: { current: number; total: number }) {
       {Array.from({ length: total }).map((_, i) => (
         <span
           key={i}
-          className={
+          className={[
+            'rounded-full transition-all duration-300',
             i < current
-              ? 'w-2 h-2 rounded-full bg-emerald-500'
+              ? 'w-4 h-2 bg-emerald-400'
               : i === current
-              ? 'w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-emerald-200'
-              : 'w-2 h-2 rounded-full border-2 border-stone-300'
-          }
+              ? 'w-6 h-2 bg-emerald-600'
+              : 'w-2 h-2 bg-stone-200',
+          ].join(' ')}
         />
       ))}
     </div>
@@ -97,8 +98,8 @@ function StepDots({ current, total }: { current: number; total: number }) {
 function StepHeader({ title, subtitle }: { title: string; subtitle: string }) {
   return (
     <div className="mb-6">
-      <h1 className="text-2xl font-semibold text-stone-900 mb-1">{title}</h1>
-      <p className="text-stone-500 text-sm">{subtitle}</p>
+      <h1 className="text-2xl font-bold text-stone-900 mb-1.5 leading-tight">{title}</h1>
+      <p className="text-stone-500 text-[15px] leading-relaxed">{subtitle}</p>
     </div>
   )
 }
@@ -116,12 +117,15 @@ function SelectionChip({
     <button
       type="button"
       onClick={onToggle}
-      className={`px-4 py-2 rounded-full text-sm font-medium border transition-all ${
+      className={[
+        'px-4 py-2 rounded-full text-sm font-medium border transition-all duration-150',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500',
         selected
-          ? 'bg-emerald-50 border-emerald-500 text-emerald-700'
-          : 'bg-white border-stone-200 text-stone-700 hover:border-stone-300'
-      }`}
+          ? 'bg-emerald-600 border-emerald-600 text-white shadow-sm'
+          : 'bg-white border-stone-200 text-stone-700 hover:border-emerald-300 hover:bg-emerald-50/50',
+      ].join(' ')}
     >
+      {selected && <span className="mr-1 text-xs">✓</span>}
       {label}
     </button>
   )
@@ -179,9 +183,15 @@ function StepWelcome({
 }) {
   return (
     <div>
+      {/* Hero graphic */}
+      <div className="flex items-center justify-center mb-8">
+        <div className="w-24 h-24 rounded-3xl bg-emerald-100 flex items-center justify-center shadow-sm">
+          <span className="text-5xl" role="img" aria-label="Plant">🌿</span>
+        </div>
+      </div>
       <StepHeader
         title="Welcome to GutTrigger"
-        subtitle="Let's personalise your experience. This only takes a minute."
+        subtitle="Let's personalise your experience. This only takes a minute — and will make your food tracking much more powerful."
       />
       <div className="space-y-1.5">
         <label htmlFor="name" className="block text-sm font-medium text-stone-700">
@@ -194,7 +204,7 @@ function StepWelcome({
           value={data.name}
           onChange={(e) => onChange({ name: e.target.value })}
           placeholder="Your first name"
-          className="w-full border border-stone-200 rounded-xl px-4 py-2.5 text-sm text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition"
+          className="w-full border border-stone-200 rounded-xl px-4 py-3 text-[15px] text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition"
         />
       </div>
     </div>
@@ -524,32 +534,42 @@ export default function OnboardingPage() {
   const isLastStep = step === TOTAL_STEPS - 1
 
   return (
-    <div className="flex flex-col min-h-svh">
-      {/* Top bar: back link + dots */}
-      <div className="sticky top-0 bg-stone-50 z-10">
-        <div className="max-w-md mx-auto px-4 pt-4 pb-1 flex items-center">
+    <div className="flex flex-col min-h-svh bg-stone-50">
+      {/* Top bar: back link + step label + dots */}
+      <div className="sticky top-0 bg-stone-50/95 backdrop-blur-sm z-10 border-b border-stone-100/60">
+        <div className="max-w-md mx-auto px-4 pt-4 pb-1 flex items-center gap-3">
           {step > 0 ? (
             <button
               type="button"
               onClick={() => setStep((s) => s - 1)}
-              className="text-sm text-stone-500 hover:text-stone-700 transition"
+              aria-label="Go back"
+              className="w-8 h-8 flex items-center justify-center rounded-xl bg-white border border-stone-200 text-stone-500 hover:bg-stone-50 hover:text-stone-700 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
             >
-              ← Back
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                <path d="M9 11L5 7l4-4" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
             </button>
           ) : (
-            <span className="text-sm text-transparent select-none">← Back</span>
+            <span className="w-8 h-8 flex-shrink-0" />
           )}
-          <span className="ml-auto text-xs text-stone-400 font-medium">
-            {STEP_LABELS[step]}
+          <div className="flex-1" />
+          <span className="text-xs text-stone-400 font-medium">
+            {step + 1} of {TOTAL_STEPS}
           </span>
         </div>
-        <div className="max-w-md mx-auto px-4">
-          <StepDots current={step} total={TOTAL_STEPS} />
+        {/* Progress bar */}
+        <div className="max-w-md mx-auto px-4 pb-3 pt-2">
+          <div className="h-1.5 bg-stone-200 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-emerald-500 rounded-full transition-all duration-500 ease-out"
+              style={{ width: `${((step + 1) / TOTAL_STEPS) * 100}%` }}
+            />
+          </div>
         </div>
       </div>
 
       {/* Step content */}
-      <div className="flex-1 max-w-md mx-auto w-full px-4 pt-6 pb-32">
+      <div className="flex-1 max-w-md mx-auto w-full px-4 pt-6 pb-36">
         {step === 0 && <StepWelcome data={formData} onChange={update} />}
         {step === 1 && <StepGoal data={formData} onChange={update} />}
         {step === 2 && <StepSymptoms data={formData} onChange={update} />}
@@ -561,20 +581,25 @@ export default function OnboardingPage() {
       </div>
 
       {/* Fixed bottom CTA */}
-      <div className="fixed bottom-0 left-0 right-0 bg-gradient-to-t from-stone-50 via-stone-50 to-transparent pt-6 pb-8 px-4">
-        <div className="max-w-md mx-auto">
+      <div className="fixed bottom-0 left-0 right-0 bg-gradient-to-t from-stone-50 via-stone-50/95 to-transparent pt-8 pb-safe px-4 pb-10">
+        <div className="max-w-md mx-auto space-y-2">
           <button
             type="button"
             disabled={!canAdvance() || isPending}
             onClick={isLastStep ? handleFinish : () => setStep((s) => s + 1)}
-            className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium text-sm rounded-2xl px-4 py-3.5 transition"
+            className="w-full bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-[15px] rounded-2xl px-4 py-4 transition shadow-sm shadow-emerald-200"
           >
             {isPending
-              ? 'Saving…'
+              ? 'Setting up your account…'
               : isLastStep
-              ? 'Get started'
+              ? 'Get started →'
               : 'Continue'}
           </button>
+          {step === 0 && (
+            <p className="text-center text-xs text-stone-400">
+              Your data stays private and is never sold.
+            </p>
+          )}
         </div>
       </div>
     </div>
