@@ -1,11 +1,28 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { GoogleGenerativeAI } from '@google/generative-ai'
-import { createClient } from '@/lib/supabase/server'
+import { createClient as createServerClient } from '@/lib/supabase/server'
+import { createClient } from '@supabase/supabase-js'
 
-export async function POST(request: Request) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) {
+export async function POST(request: NextRequest) {
+  // Support both cookie-based (web) and Bearer token (mobile) auth
+  const authHeader = request.headers.get('authorization')
+  let authed = false
+
+  if (authHeader?.startsWith('Bearer ')) {
+    const token = authHeader.slice(7)
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    )
+    const { data: { user } } = await supabase.auth.getUser(token)
+    authed = !!user
+  } else {
+    const supabase = await createServerClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    authed = !!user
+  }
+
+  if (!authed) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -14,7 +31,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'AI service not configured' }, { status: 500 })
   }
 
-  const { imageData, mediaType } = await request.json()
+  const body = await request.json()
+  // Support both { imageData, mediaType } (web) and { image } (mobile base64)
+  const imageData = body.imageData ?? body.image
+  const mediaType = body.mediaType ?? 'image/jpeg'
   if (!imageData || !mediaType) {
     return NextResponse.json({ error: 'Missing imageData or mediaType' }, { status: 400 })
   }
