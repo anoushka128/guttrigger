@@ -4,28 +4,6 @@ import { createClient as createServerClient } from '@/lib/supabase/server'
 import { createClient } from '@supabase/supabase-js'
 
 export async function POST(request: NextRequest) {
-  // Support both cookie-based (web) and Bearer token (mobile) auth
-  const authHeader = request.headers.get('authorization')
-  let authed = false
-
-  if (authHeader?.startsWith('Bearer ')) {
-    const token = authHeader.slice(7)
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    )
-    const { data: { user } } = await supabase.auth.getUser(token)
-    authed = !!user
-  } else {
-    const supabase = await createServerClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    authed = !!user
-  }
-
-  if (!authed) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
   if (!process.env.GEMINI_API_KEY) {
     console.error('GEMINI_API_KEY is not set')
     return NextResponse.json({ error: 'AI service not configured' }, { status: 500 })
